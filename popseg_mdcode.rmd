@@ -1,0 +1,358 @@
+---
+output:
+  bookdown::word_document2: default
+  html_document: default
+---
+
+---
+title: `r pres_title`
+author: `r pres_author`
+date: `r pres_date`
+output: 
+  bookdown::word_document2:
+  fig_caption: yes
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+dat<-read.csv(file)
+target<-paste0("util.",seg_by_2,".",seg_by_1)
+dat$target<-dat[[target]]
+```
+
+
+## 1. Introduction
+
+Population Segmentation concerns the grouping of individuals into a number of distinct cohorts. Ultimately, the aim is to identify meaningful and interpretable population cohorts which are *heterogeneous* [^1] between and *homogeneous* [^2] within. It is important to have such discrimination since it allows the greatest differences in patient type to be uncovered.
+
+[^1]: *"consisting of dissimilar or diverse constituents"*
+
+[^2]: *"constituents of the same or a similar kind or nature"*
+
+Population Segmentation is an important tool in healthcare since it allows managers and clinicians to cut through the complexity of large and unwieldy datasets in making sense of the key patient-related attributes that drive the most significant differences in some targeted measure of interest - here utilisation, as measured by **`r paste(seg_by_1,seg_by_2)`**. 
+
+`r ifelse(seg_by_1=="Total",paste0("Total ",seg_by_2," includes all secondary care contacts such as outpatient appointments, inpatient admissions and A+E attendances as well as primary care contacts such as GP and nurse appointments."),"")`
+
+While knowledge of the segments themselves can be useful and of interest, it often represents just the starting point in Population Health Management, albeit an important one. From such a foundation one can then inspect patients and patient pathways within each segment, perhaps focusing on those of highest spend. With this knowledge, and perhaps having identified inefficient of duplicative services, the aim thereafter would be to *tailor* specific interventions to such segments, or more effectively *shape* services around such patient demand, e.g. through integrated primary and community care hubs.
+
+For more information on Population Segmentation see *A comparison of population segmentation methods* which is available on request from <richard.wood16@nhs.net> or <ben.murch@nhs.net>.
+
+
+## 2. Descriptive results
+
+
+Before performing any segmentation, it is helpful to inspect the data (see Figure \@ref(fig:descriptions)).
+
+```{r descriptions, warning = FALSE,echo=FALSE, fig.height=9,fig.width=9,fig.cap="Descriptive summary of the population"}
+p1 <- dat %>% 
+  #mutate(target = target / 1000) %>% 
+  ggplot(aes(target)) +
+  geom_histogram(aes(y=..count../sum(..count..)), bins = 15,fill="dodgerblue4") +
+  scale_x_continuous(paste0(seg_by_1," ",seg_by_2,ifelse(seg_by_2=="Spend"," (?)","")), limits = c(NA, quantile(dat$target,0.9)))+
+  scale_y_continuous("Proportion of population", labels = scales::percent_format(1)) +
+  theme_tq() +
+  theme(axis.text.x=element_text(size=15),
+        axis.text.y=element_text(size=15),
+        axis.title.x=element_text(size=15),
+        axis.title.y=element_text(size=15))
+#print(paste(round(100*nrow(filter(complete_data, target > 0))/nrow(complete_data),2),"% above ?0k"))
+#print(paste("mean =",round(mean(complete_data$target),2)))
+#print(paste("median =",median(complete_data$target)))
+#print(paste(nrow(filter(complete_data, target > 2000)),"(",round(100*nrow(filter(complete_data, target > 2000))/nrow(complete_data),2),"%) above ?2k"))
+
+p2 <- dat %>% 
+  select(target) %>% 
+  arrange(target) %>% 
+  mutate(cost_cumsum_prop = cumsum(target) / sum(target),
+         pop_prop = row_number() / nrow(.)) %>% 
+  ggplot(aes(pop_prop, cost_cumsum_prop)) +
+  geom_line(col="dodgerblue4",size=2) + 
+  geom_abline(linetype = 2) +
+  scale_x_continuous("Proportion of population", labels = scales::percent_format()) +
+  scale_y_continuous(paste0("Prop. of ",seg_by_2," in population"), labels = scales::percent_format()) +
+  theme_tq()+
+  theme(axis.text.x=element_text(size=15),
+        axis.text.y=element_text(size=15),
+        axis.title.x=element_text(size=15),
+        axis.title.y=element_text(size=15))
+p2.tmp1<-cumsum(sort(dat$target,decreasing=TRUE))/sum(dat$target)
+p2.tmp2<-which.min((p2.tmp1-0.5)^2)
+p2.tmp3<-round(100*p2.tmp2/nrow(dat))
+p2.tmp.gini<-ineq::ineq(dat$target, type = "Gini")
+
+ord_age <- c("0-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34", "35-39",
+             "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70-74",
+             "75-79", "80-84", "85-89", "90-94", "95+")
+
+p3 <- dat %>% 
+  mutate(att.Ageband = cut(dat$att.Age, c(seq(-1, 95, 5), Inf),
+                            labels = ord_age)) %>% 
+  ggplot(aes(att.Ageband)) +
+  geom_bar(aes(y=..count../sum(..count..)),
+           colour = "white",fill="dodgerblue4") +
+  scale_x_discrete("Age in five year bands") +
+  scale_y_continuous("Proportion of population", labels = scales::percent_format(1)) +
+  theme_tq() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))+
+  theme(axis.text.x=element_text(size=15),
+        axis.text.y=element_text(size=15),
+        axis.title.x=element_text(size=15),
+        axis.title.y=element_text(size=15))
+
+p4 <- dat %>% 
+  ggplot(aes(att.Long_term_conditions_count)) +
+  geom_bar(aes(y=..count../sum(..count..)),
+           colour = "white",fill="dodgerblue4") +
+  scale_x_continuous("Number of long-term conditions") +
+  scale_y_continuous("Proportion of population", labels = scales::percent_format(1)) +
+  theme_tq()+
+  theme(axis.text.x=element_text(size=15),
+        axis.text.y=element_text(size=15),
+        axis.title.x=element_text(size=15),
+        axis.title.y=element_text(size=15))
+
+ggpubr::ggarrange(p1,p2,p3,p4,nrow=2,ncol=2,labels=c("A","B","C","D"))
+
+```
+
+There are `r comma(nrow(dat))` individuals in the dataset. Annual `r paste(seg_by_1,seg_by_2)` is `r ifelse(skewness(dat$target)>=0,"right-skewed","left-skewed")` with a mean and median of `r paste(ifelse(seg_by_2=="Spend","?",""))``r round(mean(dat$target))` and `r paste(ifelse(seg_by_2=="Spend","?",""))``r round(median(dat$target))` respectively - note for display purposes the figure excludes `r length(which(dat$target>quantile(dat$target,0.9)))` (10%) of observations with `r paste(seg_by_2)` above `r paste(ifelse(seg_by_2=="Spend","?",""))``r round(quantile(dat$target,0.9))` (Figure \@ref(fig:descriptions)A). There is `r ifelse(p2.tmp.gini>0.5,"good",ifelse(p2.tmp.gini>0.2,"some","no"))` evidence that `r paste(seg_by_1,seg_by_2)` is unequally distributed among the population, with half of `r paste(seg_by_2)` being consumed by the highest-consuming `r p2.tmp3`% of the population and a Gini coefficient `r round(p2.tmp.gini,2)` (Figure \@ref(fig:descriptions)B). Mean and median age is `r round(mean(dat$att.Age))` and `r round(median(dat$att.Age))` respectively (Figure \@ref(fig:descriptions)C), with `r round(100*nrow(filter(dat,att.Sex == "Male"))/nrow(dat),1)`% of the population male. `r round(100*nrow(filter(dat,att.Long_term_conditions_count >0))/nrow(dat),1)`% of the population have at least one of the recorded long-term conditions (Figure \@ref(fig:descriptions)D).
+
+
+
+
+
+```{r, warning=FALSE,echo=FALSE}
+
+# 1. AGE / LTC SPLIT
+dat <- dat %>% 
+  mutate(segment.ageltc=if_else(att.Long_term_conditions_count <=0 & att.Age<=17, "0-17yr,0LTC", NULL),
+         segment.ageltc=if_else(att.Long_term_conditions_count >=1 & att.Long_term_conditions_count<=2 & att.Age<=17, "0-17yr,1-2LTC", segment.ageltc),
+         segment.ageltc=if_else(att.Long_term_conditions_count >=3 & att.Age<=17, "0-17yr,3+LTC", segment.ageltc),
+         segment.ageltc=if_else(att.Long_term_conditions_count <=0 & att.Age>=18 & att.Age<=64, "18-64yr,0LTC", segment.ageltc),
+         segment.ageltc=if_else(att.Long_term_conditions_count >=1 & att.Long_term_conditions_count<=2 & att.Age>=18 & att.Age<=64, "18-64yr,1-2LTC", segment.ageltc),
+         segment.ageltc=if_else(att.Long_term_conditions_count >=3 & att.Age>=18 & att.Age<=64, "18-64yr,3+LTC", segment.ageltc),
+         segment.ageltc=if_else(att.Long_term_conditions_count <=0 & att.Age>=65, "65+yr,0LTC", segment.ageltc),
+         segment.ageltc=if_else(att.Long_term_conditions_count >=1 & att.Long_term_conditions_count<=2 & att.Age>=65, "65+yr,1-2LTC", segment.ageltc),
+         segment.ageltc=if_else(att.Long_term_conditions_count >=3 & att.Age>=65, "65+yr,3+LTC", segment.ageltc)
+         )
+dat$segment.ageltc<-factor(dat$segment.ageltc,levels=c("0-17yr,0LTC","0-17yr,1-2LTC","0-17yr,3+LTC","18-64yr,0LTC","18-64yr,1-2LTC","18-64yr,3+LTC","65+yr,0LTC",
+                                                       "65+yr,1-2LTC","65+yr,3+LTC"))
+  seg.ageltc<-dat %>%
+    group_by(!!as.name("segment.ageltc")) %>%
+    summarise(target=mean(target),pop=n(),avg_age=mean(att.Age),pc_male=sum(att.Sex=="Male")/n(),avg_imd=mean(att.IMD_level),avg_ltc=mean(att.Long_term_conditions_count)) %>%
+    mutate(segment_plot=paste0(segment.ageltc,"\n(",seg_by_2,"=",ifelse(seg_by_2=="Spend","?",""),round(target),", age=",round(avg_age),", LTCs=",round(avg_ltc),")")) %>%
+  complete(!!as.name("segment.ageltc"))
+  
+  
+  for (i in 1:nrow(seg.ageltc)) {
+    if (!is.na(seg.ageltc$pop[i])) {
+      if (seg.ageltc$pop[i]<10) {
+        seg.ageltc$target[i]<-NA
+        seg.ageltc$pop[i]<-NA
+        seg.ageltc$avg_age[i]<-NA
+        seg.ageltc$pc_male[i]<-NA
+        seg.ageltc$avg_imd[i]<-NA
+        seg.ageltc$avg_ltc[i]<-NA
+        seg.ageltc$segment_plot[i]<-NA
+      }
+    }
+  }
+
+  
+
+# 2. BRIDGES TO HEALTH
+dat$segment.bth<-sapply(1:nrow(dat),function(x) {
+  if (dat$att.Dementia[x]==1 | dat$att.EFI_classification[x] %in% c("Moderate","Severe")) return("Frailty")
+  if (dat$att.Heart_failure[x]==1 | dat$att.CHD[x]==1  |dat$att.CKD[x]==1) return("Limited reserve")
+  if (dat$att.Cancer[x]==1) return("Cancer")
+  #removed quadriplegia and paraplegia from conditions as this is not recorded in swd ####
+  if (dat$att.Learning_disability[x]==1 | dat$att.Blindness[x]==1 | dat$att.Deafness[x]==1) return("Disability")
+  if (dat$att.Long_term_conditions_count[x]>1) return("Long-term conditions")
+  #changed female to lower case to match swd code format ####
+  if (dat$att.Sex[x]=="female" & dat$util.Activity.Maternity[x]>0) return("Maternity")
+  if (dat$util.Activity.NEL_admits[x]>0) return("Acutely ill")
+  return("Healthy")
+})
+dat$segment.bth<-factor(dat$segment.bth,levels=c("Frailty","Limited reserve","Cancer","Disability","Long-term conditions","Maternity","Acutely ill","Healthy"))
+
+seg.bth<-dat %>%
+    group_by(!!as.name("segment.bth")) %>%
+    summarise(target=mean(target),pop=n(),avg_age=mean(att.Age),pc_male=sum(att.Sex=="Male")/n(),avg_imd=mean(att.IMD_level),avg_ltc=mean(att.Long_term_conditions_count)) %>%
+    mutate(segment_plot=paste0(segment.bth,"\n(",seg_by_2,"=",ifelse(seg_by_2=="Spend","?",""),round(target),", age=",round(avg_age),", LTCs=",round(avg_ltc),")"))
+
+# 3. DECISION TREES
+cart.max.depth<-3
+xvars<-colnames(select(dat,starts_with("att")))
+cart.model<-rpart(as.formula(paste("target ~",paste(xvars, collapse = "+"))),data = dat,
+               control = list(minbucket = max(0.025*nrow(dat),50),maxdepth=cart.max.depth,cp=0.001))
+dat$segment.cart<-cart.model$where
+#cart.model.p<-as.party(cart.model)
+#tmp<-do.call("rbind",lapply(nodeids(cart.model.p,terminal=TRUE),function(x) {
+#  data.frame(id.patient=dat$id.patient[as.numeric(rownames(cart.model.p[x]$data))],segment.cart=x)
+#}))
+#dat<-left_join(dat,tmp,by="id.patient")
+
+seg.cart<-dat %>%
+    group_by(!!as.name("segment.cart")) %>%
+    summarise(target=mean(target),pop=n(),avg_age=mean(att.Age),pc_male=sum(att.Sex=="Male")/n(),avg_imd=mean(att.IMD_level),avg_ltc=mean(att.Long_term_conditions_count)) %>%
+    mutate(segment_plot=paste0("Node ",segment.cart,"\n(",seg_by_2,"=",ifelse(seg_by_2=="Spend","?",""),round(target),", age=",round(avg_age),", LTCs=",round(avg_ltc),")"))
+
+# 4. RIV FORMULA
+riv<-function(x) {
+  v_p<-var(dat$target)
+  v_w<-dat %>%
+    group_by_at(x) %>%
+    summarise(var=var(target),n=n())
+  v_w<-sum(v_w$var*v_w$n,na.rm=TRUE)/sum(v_w$n)
+  return(100*(v_p-v_w)/v_p)
+}
+
+```
+
+## 3. Segmentation by Age and Long-term Condition count
+
+A basic and commonly-used approach to segmentation is to partition the population according to their Age and number of Long-term Conditions. Figure \@ref(fig:ageltcgrid) plots these segments, detailing the number of individuals within each segment and the mean `r paste(seg_by_2)`. If greater per capita `r paste(seg_by_2)` is associated with increasing Age and Long-term Condition count, then the shading of the grid boxes should get darker moving from bottom-left to top-right.
+
+```{r ageltcgrid, warning=FALSE, echo=FALSE, fig.height=7,fig.width=9,fig.cap=paste0("Partition grid for Age and Long-term Condition segmentation of ",paste(seg_by_1,seg_by_2))}
+
+seg.ageltc$var1<-unlist(lapply(strsplit(as.character(seg.ageltc$segment.ageltc),","),function(x) x[1]))
+seg.ageltc$var2<-unlist(lapply(strsplit(as.character(seg.ageltc$segment.ageltc),","),function(x) x[2]))
+
+seg.ageltc$grid.labels<-sapply(1:nrow(seg.ageltc),function(x) {
+  if (is.na(seg.ageltc$target[x])) {
+    return("No individuals")
+  } else {
+    return(paste0(paste(seg_by_2),"=",ifelse(paste(seg_by_2)=="Activity","","?"),round(seg.ageltc$target[x]),"\nNumber=",seg.ageltc$pop[x]))
+  }
+})
+
+ggplot(seg.ageltc,aes(var1,var2)) +
+  geom_tile(aes(fill=target),colour="white") +
+  #scale_fill_gradient(low="lightgrey",high="dodgerblue4") +
+  scale_fill_gradient(low=colorRampPalette(brewer.pal(4,"Blues"))(25)[1],
+                      high=colorRampPalette(brewer.pal(4,"Blues"))(25)[25]) +
+  theme(axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.x=element_text(size=15),
+        axis.text.y=element_text(size=15),
+        legend.text=element_text(size=12),
+        legend.title=element_text(size=14)) +
+  geom_text(aes(label=grid.labels),size=5) +
+  guides(fill=guide_legend(title=paste0("Mean ",paste(seg_by_2),ifelse(seg_by_2=="Spend"," (?)",""))))
+
+```
+
+From this it can be seen that the greatest mean `r paste(seg_by_2)` is in the segment containing individuals aged `r seg.ageltc$var1[which.max(seg.ageltc$target)]` and with `r seg.ageltc$var2[which.max(seg.ageltc$target)]` (`r round(100*seg.ageltc$pop[which.max(seg.ageltc$target)]/sum(seg.ageltc$pop,na.rm=TRUE))`% of the population). This is `r round(seg.ageltc$target[which.max(seg.ageltc$target)]/seg.ageltc$target[which.min(seg.ageltc$target)],digits=1)` times `r paste(seg_by_2)` than that of the lowest `r paste(seg_by_2)` segment, containing individuals aged `r seg.ageltc$var1[which.min(seg.ageltc$target)]` and with `r seg.ageltc$var2[which.min(seg.ageltc$target)]` (`r round(100*seg.ageltc$pop[which.min(seg.ageltc$target)]/sum(seg.ageltc$pop,na.rm=TRUE))`% of the population). Bear in mind that it could be useful to merge segments, e.g. the 1-2LTC and 3+LTC segments for 0-17yr individuals.
+
+A *treeplot* is a convenient alternative way to display segment results (Figure \@ref(fig:ageltctreeplot)). From this it is easy to see the size of each segment in relation to its mean `r paste(seg_by_2)`. Also detailed in parantheses is the mean Age and number of Long-term Conditions for each segment.
+
+```{r ageltctreeplot, echo=FALSE, fig.height=9,fig.width=9,fig.cap=paste0("Treeplot for Age and Long-term Condition segmentation of ",paste(seg_by_1,seg_by_2))}
+  treemap(seg.ageltc,
+          index=c("segment_plot"),
+          vSize="pop",
+          vColor="target",
+          title="",
+          fontsize.labels = 16,
+          fontsize.legend = 14,
+          type="manual",
+          palette=colorRampPalette(brewer.pal(4,"Blues"))(25),
+          title.legend=paste0("Mean ",seg_by_2,ifelse(seg_by_2=="Spend"," (?)",""))
+  )
+```
+
+As has been mentioned, discrimination is imporant in order to uncover the largest differences in `r paste(seg_by_2)`, which can help identify high-use groups and put in place tailored interventions, such as admission avoidance policies. Here, discrimination is measured by the reduction in variance in `r paste(seg_by_2)` achieved through segmentation. The greater the reduction in variance, the more homogenous the `r paste(seg_by_2)` profiles within each segment.
+
+Reduction in variance is calculated as $(\sigma^2_P-\sigma^2_W)/\sigma^2_P$ where $\sigma^2_P$ is the un-segmented population variance in `r paste(seg_by_1,seg_by_2)` and $\sigma^2_W$ is the segment-weighted variance calculated as $\sigma^2_W={\sum_{i=1}^Nn_i\sigma^2_i}/{\sum_{i=1}^Nn_i}$ where $n_i$ and $\sigma_i^2$ are respectively the number of observations and variance of `r paste(seg_by_2)` in segment $i\in\{1,2,...,N\}$.
+
+The overall reduction in variance of `r paste(seg_by_1,seg_by_2)` is `r round(riv("segment.ageltc"))`% with this method. This means that grouping individuals under this segmentation method leads to `r round(riv("segment.ageltc"))`% less variance in `r paste(seg_by_1,seg_by_2)` than the whole, unsegmented population.
+
+
+## 4. Segmentation by Bridges to Health method
+
+```{r , echo=FALSE}
+summary.bth<-data.frame(Name=seg.bth$segment.bth,
+                        Description=c("Dementia or EFI classification Moderate or Severe","Heart failure, CHD or CKD",
+                                      "Any cancer condition","Learning disability, blindness, deafness or paralysed",
+                                      "At least one long-term condition","Female and at least one maternity admission","At least one non-elective admission","< other >"),
+                        Number=seg.bth$pop,
+                        Mean=round(seg.bth$target))
+names(summary.bth)<-c("Name","Description","Number",paste0("Mean ",seg_by_2,ifelse(seg_by_2=="Spend"," (?)","")))
+  
+```
+
+Bridges to Health (Lynn et al, 2007) is another popular method to segment a population. This is a different type of approach to partitioning by splits on variables such as Age and Long-term Condition count. Instead it defines eight segments through example patient types from which can be inferred certain attributes to qualify membership. The advantage of this method is that is provides easily-interpretable segment names and, given fixed membership rules for each segment, can be useful for benchmarking across different systems.
+
+Table \@ref(tab:bthsumm) provides a brief description of the segment names, along with the number of individuals within each segment and the corresponding mean `r paste(seg_by_1,seg_by_2)`. Note that activity is used in the segment membership rules (for *Acutely Ill*). This should be interpreted with some caution due to the circularity it can promote (i.e. using utilisation to explain utilisation).
+
+
+```{r bthsumm, echo=FALSE,tab.cap="xxx"}
+kable(summary.bth,caption=paste0('Summary for Bridges to Health segmentation of ',paste(seg_by_1,seg_by_2)),
+      align=c("l","l","r","r"))
+```
+
+Visualised in perhaps a more interpretable way is the *treeplot* for this segmentation presented in Figure \@ref(fig:bthtreeplot).
+
+```{r bthtreeplot,echo=FALSE,fig.height=9,fig.width=9,fig.cap=paste0("Treeplot for Bridges to Health segmentation of ",paste(seg_by_1,seg_by_2))}
+  treemap(seg.bth,
+          index=c("segment_plot"),
+          vSize="pop",
+          vColor="target",
+          title="",
+          fontsize.labels = 16,
+          fontsize.legend = 14,
+          type="manual",
+          palette=colorRampPalette(brewer.pal(4,"Blues"))(25),
+          title.legend=paste0("Mean ",seg_by_2,ifelse(seg_by_2=="Spend"," (?)",""))
+  )
+```
+
+The overall reduction in variance of `r paste(seg_by_1,seg_by_2)` achieved through this method is `r round(riv("segment.bth"))`%. This is `r round(abs(riv("segment.bth")-riv("segment.ageltc")),digits=1)` percentage points `r ifelse(riv("segment.bth")-riv("segment.ageltc")<0,"lower","higher")`  that of the Age and Long-term Condition segmentation, suggesting the Bridges to Health method may be `r ifelse(riv("segment.bth")-riv("segment.ageltc")<0,"inferior","superior")` for identifying distinct, discriminative cohorts within the population.
+
+## 5. Segmentation by Decision Tree
+
+Decision Trees are a well-established statistical learning approach to identify cohorts by objectively determining the person-related attributes to *branch* upon. They are conceptually appropriate to this problem and can yield high levels of discrimination through offering a locally-calibrated solution. This is in contrast to the other methods where there is no guarantee that segment membership rules can be transferred between different demographics, regions and time periods without losing power. That is, the Bridges to Health segment criteria (as in Table \@ref(tab:bthsumm)) may provide good discrimination on the population where it has been developed, but not others such as the one considered here.
+
+The Decision Tree propagates in a binary fashion where two-way splits are made on the statistically-selected explanatory variables at each level. The statistical rigour of the method ensures an optimal number of segments are returned, i.e. splits are only made which yield meaningful improvements in discrimination (in difference to the other considered methods). The tree corresponding to the population considered here is plotted in Figure \@ref(fig:cartdesc). This shows some summary metrics for the ultimate segments (at the bottom of the tree) and the types of patient contained in each (through the branching criteria at each level).
+
+```{r cartdesc, echo=FALSE,fig.height=7,fig.width=9,fig.cap=paste0("Treeplot for Decision Tree segmentation of ",paste(seg_by_1,seg_by_2))}
+#plot(as.simpleparty(cart.model.p),gp=gpar(fontsize=12),
+#     terminal_panel = node_terminal,type="simple",
+#     tp_args = list(FUN =function(node) c(paste0(node$nodeID),paste0("Num = ",node$n),paste0("Mean = ?",round(node$prediction)))),
+#     margins=c(-2,+1,-2,+1))
+
+node.fun1<-function(x,labs,digits,varlen) paste0("Node ",1:nrow(x$frame),"\n",seg_by_2,"=",ifelse(seg_by_2=="Spend","?",""),round(x$frame$yval),"\nNum=",x$frame$n)
+#par(mar=c(5.1,4.1,4.1,2.1))
+rpart.plot(cart.model,type=5,fallen.leaves=FALSE,tweak=1.2,node.fun=node.fun1)
+
+```
+
+The segmentation can also be visualised with a *treeplot* as before - see Figure \@ref(fig:carttreeplot).
+
+```{r carttreeplot, echo=FALSE, fig.height=9,fig.width=9,fig.cap=paste0("Treeplot for Decision Tree segmentation of ",paste(seg_by_1,seg_by_2))}
+  treemap(seg.cart,
+          index=c("segment_plot"),
+          vSize="pop",
+          vColor="target",
+          title="",
+          fontsize.labels = 16,
+          fontsize.legend = 14,
+          type="manual",
+          palette=colorRampPalette(brewer.pal(4,"Blues"))(25),
+          title.legend=paste0("Mean ",seg_by_2,ifelse(seg_by_2=="Spend"," (?)","")))
+```
+
+The overall reduction in variance of `r paste(seg_by_1,seg_by_2)` achieved through this method is `r round(riv("segment.cart"))`%, c.f. `r round(riv("segment.ageltc"))`% for the Age and Long-term Condition segmentation and `r round(riv("segment.bth"))`% for the Bridges To Health segmentation. It is important to interpret this figure in the context of the numbers of segments derived, as generally greater discrimination is achieved with more segments. The number of segments through the Decision Tree method is `r length(unique(dat$segment.cart))`, c.f. `r length(unique(dat$segment.ageltc))` through the Age and Long-term Condition segmentation and `r length(unique(dat$segment.bth))` through the Bridges to Health method. It is also important to recall that the Bridges to Health method is circular in the sense of using utilisation (e.g. maternity/NEL) to *explain* utilisation.
+
+One potential drawback to the Decision Tree method is the lack of readily-interpretable segment names. However, with a little thought, intuitive names can usually be applied. This is typically helped through studying of i) the branching criteria used to define segment membership, i.e. in Figure \@ref(fig:cartdesc), and ii) the other attributes for patients contained within each of the segments.
+
+
+
+
+
+
+
+
