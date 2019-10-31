@@ -21,11 +21,12 @@ require(RColorBrewer)
 require(rpart)
 require(rpart.plot)
 require(scales)
+require(bookdown)
 
 pres_date <- format(Sys.Date(), "%d %B %Y")
 pres_title <- paste0("Population Segmentation by ",seg_by_1," ",seg_by_2)
 
-rmarkdown::render(input = 'popseg_mdcode.Rmd',
+rmarkdown::render(input = 'popseg_mdcode.rmd',
                   output_file = paste0(pres_title," for ",pres_author," ",Sys.Date(),'.docx'))
 
 
